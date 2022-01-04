@@ -14,7 +14,7 @@ trigger:
 jobs:
 - job: test
   strategy:
-    maxParallel: 1
+    parallel: 1
 
   steps:
   - task: helloworldtask@0
