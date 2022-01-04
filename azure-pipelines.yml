@@ -13,4 +13,5 @@ pool:
 
 steps:
   - task: helloworldtask@0
+    name: 'vadim'
 
