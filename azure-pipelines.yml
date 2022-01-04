@@ -6,10 +6,6 @@
 trigger:
 - master
 
-pool:
-  vmImage: ubuntu-latest
-  demands: Limit -equals DisAbleParallel
-
 steps:
 - task: helloworldtask@0
   name: 'vadim'
