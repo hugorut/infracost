@@ -14,5 +14,5 @@ pool:
 steps:
   - task: setuptask@0
     inputs:
-      apiKey: 'test'
+      apiKey: 'testcdd'
 
