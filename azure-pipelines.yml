@@ -12,7 +12,7 @@ pool:
   vmImage: ubuntu-latest
 
 steps:
-  - task: helloworldtask@0
+  - task: setuptask@0
     inputs:
-      name: 'vadim'
+      apiKey: 'test'
 
