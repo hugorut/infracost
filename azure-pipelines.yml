@@ -12,7 +12,7 @@ pool:
   vmImage: ubuntu-latest
 
 steps:
-  - task: setuptask@0
+  - task: SetupInfracostTask@0
     inputs:
       apiKey: 'testcdd'
 
