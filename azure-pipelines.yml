@@ -15,4 +15,5 @@ steps:
   - task: InfracostSetup@0
     inputs: 
       apiKey: 'testcdd'
+  - bash: "infracost --version"
 
