@@ -2,7 +2,7 @@ pr:
   - master
 
 jobs:
-  - job: terraform-plan-json
+  - job: terraform_plan_json
     displayName: Terraform plan JSON
     pool: ubuntu-latest
 
