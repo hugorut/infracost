@@ -1,20 +1,17 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+name: Terraform plan JSON
+pr:
+  - master
 
-trigger:
-  batch: true
-  branches:
-    include: [ master ]
+jobs:
+  - job: terraform-plan-json
+    displayName: Terraform plan JSON
+    pool: ubuntu-latest
 
-pool:
-  vmImage: windows-latest
-
-steps:
-  - task: InfracostSetup@0
-    inputs: 
-      apiKey: 'testcdd'
-      version: '0.9.14'
-  - bash: "infracost --version"
-
+    steps:
+      - task: InfracostSetup@0
+        displayName: Setup Infracost
+        inputs:
+          apiKey: $(apiKey)
+          
+      - bash: infracost --version
+        displayName: Run Infracost
