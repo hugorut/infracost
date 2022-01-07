@@ -4,7 +4,8 @@ pr:
 jobs:
   - job: terraform_plan_json
     displayName: Terraform plan JSON
-    pool: ubuntu-latest
+    pool:
+      vmImage: ubuntu-latest
 
     steps:
       - task: InfracostSetup@0
