@@ -8,8 +8,17 @@ import (
 
 var defaultVolumeSize = 10
 
+func intPtr(i int64) *int64 {
+	return &i
+}
+
 func strPtr(s string) *string {
 	return &s
+}
+
+// nolint:deadcode,unused
+func floatPtr(f float64) *float64 {
+	return &f
 }
 
 func decimalPtr(d decimal.Decimal) *decimal.Decimal {

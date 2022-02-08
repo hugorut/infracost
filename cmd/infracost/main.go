@@ -7,32 +7,43 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/infracost/infracost/internal/apiclient"
-	"github.com/infracost/infracost/internal/config"
-	"github.com/infracost/infracost/internal/ui"
-	"github.com/infracost/infracost/internal/update"
-	"github.com/infracost/infracost/internal/version"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/infracost/infracost/internal/apiclient"
+	"github.com/infracost/infracost/internal/config"
+	"github.com/infracost/infracost/internal/ui"
+	"github.com/infracost/infracost/internal/update"
+	"github.com/infracost/infracost/internal/version"
+
 	"github.com/fatih/color"
 )
 
-var spinner *ui.Spinner
-
 func main() {
-	var appErr error
-	updateMessageChan := make(chan *update.Info)
+	Run(nil, nil)
+}
 
+// Run starts the Infracost application with the configured cobra cmds.
+// Cmd args and flags are parsed from the cli, but can also be directly injected
+// using the modifyCtx and args parameters.
+func Run(modifyCtx func(*config.RunContext), args *[]string) {
 	ctx, err := config.NewRunContextFromEnv(context.Background())
 	if err != nil {
 		if err.Error() != "" {
-			ui.PrintError(os.Stderr, err.Error())
+			ui.PrintError(ctx.ErrWriter, err.Error())
 		}
-		os.Exit(1)
+
+		ctx.Exit(1)
 	}
+
+	if modifyCtx != nil {
+		modifyCtx(ctx)
+	}
+
+	var appErr error
+	updateMessageChan := make(chan *update.Info)
 
 	defer func() {
 		if appErr != nil {
@@ -47,17 +58,21 @@ func main() {
 		handleUpdateMessage(updateMessageChan)
 
 		if appErr != nil || unexpectedErr != nil {
-			os.Exit(1)
+			ctx.Exit(1)
 		}
 	}()
 
 	startUpdateCheck(ctx, updateMessageChan)
 
-	rootCmd := NewRootCommand(ctx)
+	rootCmd := newRootCmd(ctx)
+	if args != nil {
+		rootCmd.SetArgs(*args)
+	}
+
 	appErr = rootCmd.Execute()
 }
 
-func NewRootCommand(ctx *config.RunContext) *cobra.Command {
+func newRootCmd(ctx *config.RunContext) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:     "infracost",
 		Version: version.Version,
@@ -65,12 +80,13 @@ func NewRootCommand(ctx *config.RunContext) *cobra.Command {
 		Long: fmt.Sprintf(`Infracost - cloud cost estimates for Terraform
 
 %s
-  https://infracost.io/docs`, ui.BoldString("DOCS")),
-		Example: `  Generate a cost diff from Terraform directory with any required Terraform flags:
+  Quick start: https://infracost.io/docs
+  Add cost estimates to your pull requests: https://infracost.io/cicd`, ui.BoldString("DOCS")),
+		Example: `  Show cost diff from Terraform directory, using any required flags:
 
       infracost diff --path /path/to/code --terraform-plan-flags "-var-file=my.tfvars"
-	
-  Generate a full cost breakdown from Terraform directory with any required Terraform flags:
+
+  Show full cost breakdown from Terraform directory, using any required flags:
 
       infracost breakdown --path /path/to/code --terraform-plan-flags "-var-file=my.tfvars"`,
 		SilenceErrors: true,
@@ -94,6 +110,7 @@ func NewRootCommand(ctx *config.RunContext) *cobra.Command {
 	rootCmd.AddCommand(diffCmd(ctx))
 	rootCmd.AddCommand(breakdownCmd(ctx))
 	rootCmd.AddCommand(outputCmd(ctx))
+	rootCmd.AddCommand(commentCmd(ctx))
 	rootCmd.AddCommand(completionCmd())
 
 	rootCmd.SetUsageTemplate(fmt.Sprintf(`%s{{if .Runnable}}
@@ -130,7 +147,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 	))
 
 	rootCmd.SetVersionTemplate("Infracost {{.Version}}\n")
-	rootCmd.SetOut(os.Stdout)
+	rootCmd.SetOut(ctx.OutWriter)
+	rootCmd.SetErr(ctx.ErrWriter)
 
 	return rootCmd
 }
@@ -158,13 +176,8 @@ func checkAPIKey(apiKey string, apiEndpoint string, defaultEndpoint string) erro
 }
 
 func handleCLIError(ctx *config.RunContext, cliErr error) {
-	if spinner != nil {
-		spinner.Fail()
-		fmt.Fprintln(os.Stderr, "")
-	}
-
 	if cliErr.Error() != "" {
-		ui.PrintError(os.Stderr, cliErr.Error())
+		ui.PrintError(ctx.ErrWriter, cliErr.Error())
 	}
 
 	err := apiclient.ReportCLIError(ctx, cliErr)
@@ -174,14 +187,9 @@ func handleCLIError(ctx *config.RunContext, cliErr error) {
 }
 
 func handleUnexpectedErr(ctx *config.RunContext, unexpectedErr interface{}) {
-	if spinner != nil {
-		spinner.Fail()
-		fmt.Fprintln(os.Stderr, "")
-	}
-
 	stack := string(debug.Stack())
 
-	ui.PrintUnexpectedError(unexpectedErr, stack)
+	ui.PrintUnexpectedErrorStack(ctx.ErrWriter, unexpectedErr, stack)
 
 	err := apiclient.ReportCLIError(ctx, fmt.Errorf("%s\n%s", unexpectedErr, stack))
 	if err != nil {
@@ -217,6 +225,7 @@ func loadGlobalFlags(ctx *config.RunContext, cmd *cobra.Command) error {
 		}
 	}
 
+	ctx.SetContextValue("dashboardEnabled", ctx.Config.EnableDashboard)
 	ctx.SetContextValue("isDefaultPricingAPIEndpoint", ctx.Config.PricingAPIEndpoint == ctx.Config.DefaultPricingAPIEndpoint)
 
 	flagNames := make([]string, 0)
@@ -232,12 +241,17 @@ func loadGlobalFlags(ctx *config.RunContext, cmd *cobra.Command) error {
 
 // saveOutFile saves the output of the command to the file path past in the `--out-file` flag
 func saveOutFile(cmd *cobra.Command, outFile string, b []byte) error {
+	return saveOutFileWithMsg(cmd, outFile, fmt.Sprintf("Output saved to %s\n", outFile), b)
+}
+
+// saveOutFile saves the output of the command to the file path past in the `--out-file` flag
+func saveOutFileWithMsg(cmd *cobra.Command, outFile, successMsg string, b []byte) error {
 	err := ioutil.WriteFile(outFile, b, 0644) // nolint:gosec
 	if err != nil {
 		return errors.Wrap(err, "Unable to save output")
 	}
 
-	cmd.PrintErrf("Output saved to %s\n", outFile)
+	cmd.PrintErr(successMsg)
 
 	return nil
 }

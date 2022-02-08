@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/infracost/infracost/internal/testutil"
 	"github.com/stretchr/testify/require"
+
+	"github.com/infracost/infracost/internal/testutil"
 )
 
 func TestOutputHelp(t *testing.T) {
@@ -23,16 +24,40 @@ func TestOutputFormatJSON(t *testing.T) {
 	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "json", "--path", "./testdata/example_out.json", "--path", "./testdata/azure_firewall_out.json"}, opts)
 }
 
-func TestOutputFormatGithubComment(t *testing.T) {
+func TestOutputFormatGitHubComment(t *testing.T) {
 	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "github-comment", "--path", "./testdata/example_out.json", "--path", "./testdata/terraform_v0.14_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
 }
 
-func TestOutputFormatGithubCommentMultipleSkipped(t *testing.T) {
+func TestOutputFormatGitHubCommentMultipleSkipped(t *testing.T) {
 	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "github-comment", "--path", "./testdata/example_out.json", "--path", "./testdata/terraform_v0.14_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
 }
 
-func TestOutputFormatGithubCommentNoChange(t *testing.T) {
+func TestOutputFormatGitHubCommentNoChange(t *testing.T) {
 	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "github-comment", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
+}
+
+func TestOutputFormatGitLabComment(t *testing.T) {
+	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "gitlab-comment", "--path", "./testdata/example_out.json", "--path", "./testdata/terraform_v0.14_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
+}
+
+func TestOutputFormatGitLabCommentMultipleSkipped(t *testing.T) {
+	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "gitlab-comment", "--path", "./testdata/example_out.json", "--path", "./testdata/terraform_v0.14_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
+}
+
+func TestOutputFormatGitLabCommentNoChange(t *testing.T) {
+	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "gitlab-comment", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
+}
+
+func TestOutputFormatAzureReposComment(t *testing.T) {
+	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "azure-repos-comment", "--path", "./testdata/example_out.json", "--path", "./testdata/terraform_v0.14_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
+}
+
+func TestOutputFormatAzureReposCommentMultipleSkipped(t *testing.T) {
+	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "azure-repos-comment", "--path", "./testdata/example_out.json", "--path", "./testdata/terraform_v0.14_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
+}
+
+func TestOutputFormatAzureReposCommentNoChange(t *testing.T) {
+	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--format", "azure-repos-comment", "--path", "./testdata/terraform_v0.14_nochange_breakdown.json"}, nil)
 }
 
 func TestOutputFormatSlackMessage(t *testing.T) {
@@ -95,4 +120,8 @@ func TestOutputTerraformOutFileTable(t *testing.T) {
 	actual = stripDynamicValues(actual)
 
 	testutil.AssertGoldenFile(t, goldenFilePath, actual)
+}
+
+func TestOutputJSONArrayPath(t *testing.T) {
+	GoldenFileCommandTest(t, testutil.CalcGoldenFileTestdataDirName(), []string{"output", "--path", "[\"./testdata/example_out.json\", \"./testdata/terraform_v0.14*breakdown.json\"]"}, nil)
 }

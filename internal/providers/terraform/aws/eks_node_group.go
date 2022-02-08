@@ -9,7 +9,7 @@ import (
 	"github.com/infracost/infracost/internal/schema"
 )
 
-func GetNewEKSNodeGroupItem() *schema.RegistryItem {
+func getNewEKSNodeGroupItem() *schema.RegistryItem {
 	return &schema.RegistryItem{
 		Name:  "aws_eks_node_group",
 		RFunc: NewEKSNodeGroup,
@@ -35,7 +35,7 @@ func NewEKSNodeGroup(d *schema.ResourceData, u *schema.UsageData) *schema.Resour
 		Name:          d.Get("node_group_name").String(),
 		ClusterName:   d.Get("cluster_name").String(),
 		InstanceCount: intPtr(instanceCount),
-		DiskSize:      diskSize,
+		DiskSize:      float64(diskSize),
 	}
 
 	launchTemplateRefID := d.References("launch_template.0.id")

@@ -12,13 +12,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/kballard/go-shellquote"
+	"github.com/pkg/errors"
+	"golang.org/x/mod/semver"
+
 	"github.com/infracost/infracost/internal/clierror"
 	"github.com/infracost/infracost/internal/config"
 	"github.com/infracost/infracost/internal/schema"
 	"github.com/infracost/infracost/internal/ui"
-	"github.com/kballard/go-shellquote"
-	"github.com/pkg/errors"
-	"golang.org/x/mod/semver"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -84,13 +85,15 @@ func (p *DirProvider) checks() error {
 
 	_, err := exec.LookPath(binary)
 	if err != nil {
-		msg := fmt.Sprintf("Terraform binary \"%s\" could not be found.\nSet a custom Terraform binary in your Infracost config or using the environment variable INFRACOST_TERRAFORM_BINARY.", binary)
+		msg := fmt.Sprintf("Terraform binary '%s' could not be found. You have two options:\n", binary)
+		msg += "1. Set a custom Terraform binary using the environment variable INFRACOST_TERRAFORM_BINARY.\n\n"
+		msg += fmt.Sprintf("2. Set --path to a Terraform plan JSON file. See %s for how to generate this.", ui.LinkString("https://infracost.io/troubleshoot"))
 		return clierror.NewSanitizedError(errors.Errorf(msg), "Terraform binary could not be found")
 	}
 
 	out, err := exec.Command(binary, "-version").Output()
 	if err != nil {
-		msg := fmt.Sprintf("Could not get version of Terraform binary \"%s\"", binary)
+		msg := fmt.Sprintf("Could not get version of Terraform binary '%s'", binary)
 		return clierror.NewSanitizedError(errors.Errorf(msg), "Could not get version of Terraform binary")
 	}
 
@@ -135,6 +138,13 @@ func (p *DirProvider) LoadResources(usage map[string]*schema.UsageData) ([]*sche
 		return projects, err
 	}
 
+	spinner := ui.NewSpinner("Extracting only cost-related params from terraform", ui.SpinnerOptions{
+		EnableLogging: p.ctx.RunContext.Config.IsLogging(),
+		NoColor:       p.ctx.RunContext.Config.NoColor,
+		Indent:        "  ",
+	})
+	defer spinner.Fail()
+
 	jsons := [][]byte{out}
 	if p.IsTerragrunt {
 		jsons = bytes.Split(out, []byte{'\n'})
@@ -166,6 +176,7 @@ func (p *DirProvider) LoadResources(usage map[string]*schema.UsageData) ([]*sche
 		projects = append(projects, project)
 	}
 
+	spinner.Success()
 	return projects, nil
 }
 
@@ -176,6 +187,8 @@ func (p *DirProvider) generatePlanJSON() ([]byte, error) {
 
 	if UsePlanCache(p) {
 		spinner := ui.NewSpinner("Checking for cached plan...", p.spinnerOpts)
+		defer spinner.Fail()
+
 		cached, err := ReadPlanCache(p)
 		if err != nil {
 			spinner.SuccessWithMessage(fmt.Sprintf("Checking for cached plan... %v", err.Error()))
@@ -200,6 +213,8 @@ func (p *DirProvider) generatePlanJSON() ([]byte, error) {
 	}
 
 	spinner := ui.NewSpinner("Running terraform plan", p.spinnerOpts)
+	defer spinner.Fail()
+
 	planFile, planJSON, err := p.runPlan(opts, spinner, true)
 	defer os.Remove(planFile)
 
@@ -242,6 +257,8 @@ func (p *DirProvider) generateStateJSON() ([]byte, error) {
 	}
 
 	spinner := ui.NewSpinner("Running terraform show", p.spinnerOpts)
+	defer spinner.Fail()
+
 	j, err := p.runShow(opts, spinner, "")
 	if err == nil {
 		p.cachedStateJSON = j
@@ -303,7 +320,10 @@ func (p *DirProvider) runPlan(opts *CmdOptions, spinner *ui.Spinner, initOnFail 
 			strings.Contains(extractedErr, "Error: Initialization required") ||
 			strings.Contains(extractedErr, "Error: Backend initialization required") ||
 			strings.Contains(extractedErr, "Error: Provider requirements cannot be satisfied by locked dependencies") ||
-			strings.Contains(extractedErr, "Error: Module not installed")) {
+			strings.Contains(extractedErr, "Error: Inconsistent dependency lock file") ||
+			strings.Contains(extractedErr, "Error: Module not installed") ||
+			strings.Contains(extractedErr, "Error: Terraform Cloud initialization required") ||
+			strings.Contains(extractedErr, "please run \"terraform init\"")) {
 			spinner.Stop()
 			err = p.runInit(opts, ui.NewSpinner("Running terraform init", p.spinnerOpts))
 			if err != nil {
@@ -315,21 +335,13 @@ func (p *DirProvider) runPlan(opts *CmdOptions, spinner *ui.Spinner, initOnFail 
 
 	if err != nil {
 		spinner.Fail()
+		err = p.buildTerraformErr(err)
 
-		if errors.Is(err, ErrMissingCloudToken) {
-			msg := "Please set your TERRAFORM_CLOUD_TOKEN environment variable.\n"
-			msg += "It seems like Terraform Cloud's Remote Execution Mode is being used.\n"
-			msg += "Create a Team or User API Token in the Terraform Cloud dashboard and set this environment variable."
-			fmt.Fprintln(os.Stderr, msg)
-		} else if errors.Is(err, ErrInvalidCloudToken) {
-			msg := "Please set your TERRAFORM_CLOUD_TOKEN environment variable.\n"
-			msg += "It seems like Terraform Cloud's Remote Execution Mode is being used.\n"
-			msg += "Create a Team or User API Token in the Terraform Cloud dashboard and set this environment variable."
-			fmt.Fprintln(os.Stderr, msg)
-		} else {
-			p.printTerraformErr(err)
+		cmdName := "terraform plan"
+		if p.IsTerragrunt {
+			cmdName = "terragrunt run-all plan"
 		}
-		return "", planJSON, errors.Wrap(err, "Error running terraform plan")
+		return "", planJSON, errors.Wrap(err, fmt.Sprintf("%s failed", cmdName))
 	}
 
 	spinner.Success()
@@ -347,8 +359,13 @@ func (p *DirProvider) runInit(opts *CmdOptions, spinner *ui.Spinner) error {
 	_, err := Cmd(opts, args...)
 	if err != nil {
 		spinner.Fail()
-		p.printTerraformErr(err)
-		return errors.Wrap(err, "Error running terraform init")
+		err = p.buildTerraformErr(err)
+
+		cmdName := "terraform init"
+		if p.IsTerragrunt {
+			cmdName = "terragrunt run-all init"
+		}
+		return errors.Wrap(err, fmt.Sprintf("%s failed", cmdName))
 	}
 
 	spinner.Success()
@@ -416,8 +433,13 @@ func (p *DirProvider) runShow(opts *CmdOptions, spinner *ui.Spinner, planFile st
 	out, err := Cmd(opts, args...)
 	if err != nil {
 		spinner.Fail()
-		p.printTerraformErr(err)
-		return []byte{}, errors.Wrap(err, "Error running terraform show")
+		err = p.buildTerraformErr(err)
+
+		cmdName := "terraform show"
+		if p.IsTerragrunt {
+			cmdName = "terragrunt show"
+		}
+		return []byte{}, errors.Wrap(err, fmt.Sprintf("%s failed", cmdName))
 	}
 	spinner.Success()
 
@@ -444,6 +466,11 @@ func shortTerraformVersion(full string) string {
 }
 
 func checkTerraformVersion(v string, fullV string) error {
+	if len(v) > 0 && v[0] != 'v' {
+		// The semver package requires a 'v' prefix to do a proper Compare.
+		v = "v" + v
+	}
+
 	if strings.HasPrefix(fullV, "Terraform ") && semver.Compare(v, minTerraformVer) < 0 {
 		return errors.Errorf("Terraform %s is not supported. Please use Terraform version >= %s.", v, minTerraformVer)
 	}
@@ -456,39 +483,48 @@ func checkTerraformVersion(v string, fullV string) error {
 	return nil
 }
 
-func (p *DirProvider) printTerraformErr(err error) {
+func (p *DirProvider) buildTerraformErr(err error) error {
 	stderr := extractStderr(err)
-	if stderr == "" {
-		return
-	}
 
 	binName := "Terraform"
 	if p.IsTerragrunt {
 		binName = "Terragrunt"
 	}
 
-	msg := fmt.Sprintf("\n  %s command failed with:\n%s\n", binName, ui.Indent(stderr, "    "))
+	msg := ""
+
+	if stderr != "" {
+		msg += fmt.Sprintf("\n\n  %s command failed with:\n%s", binName, ui.Indent(stderr, "    "))
+	}
 
 	if strings.HasPrefix(stderr, "Error: Failed to select workspace") {
-		msg += "\nRun `terraform workspace select your_workspace` first or set the TF_WORKSPACE environment variable.\n"
-	}
-	if strings.HasPrefix(stderr, "Error: Required token could not be found") {
-		msg += "\nRun `terraform login` first or set the TF_CLI_CONFIG_FILE environment variable to the ABSOLUTE path.\n"
-	}
-	if strings.HasPrefix(stderr, "Error: No value for required variable") {
-		msg += "\nPass Terraform flags using the --terraform-plan-flags option.\n"
-		msg += "For example: infracost --path=path/to/terraform --terraform-plan-flags=\"-var-file=my.tfvars\"\n"
-	}
-	if strings.HasPrefix(stderr, "Error: Failed to read variables file") {
-		msg += "\nSpecify the -var-file flag as a path relative to your Terraform directory.\n"
-		msg += "For example: infracost --path=path/to/terraform --terraform-plan-flags=\"-var-file=my.tfvars\"\n"
-	}
-	if strings.HasPrefix(stderr, "Error: error configuring Terraform AWS Provider: no valid credential sources for Terraform AWS Provider found.") {
-		msg += "\nTerraform requires AWS credentials to be set.\n"
-		msg += "For more details, see https://registry.terraform.io/providers/hashicorp/aws\n"
+		msg += "\n\nYou have two options:\n"
+		msg += "1. Run `terraform workspace select your_workspace` first or set the TF_WORKSPACE environment variable.\n\n"
+		msg += fmt.Sprintf("2. Set --path to a Terraform plan JSON file. See %s for how to generate this.", ui.LinkString("https://infracost.io/troubleshoot"))
+	} else if errors.Is(err, ErrMissingCloudToken) || errors.Is(err, ErrInvalidCloudToken) || strings.HasPrefix(stderr, "Error: Required token could not be found") {
+		msg += "\n\nYou have two options:\n"
+		msg += "1. Run `terraform login` or set the INFRACOST_TERRAFORM_CLOUD_TOKEN environment variable.'\n\n"
+		msg += fmt.Sprintf("2. Set --path to a Terraform plan JSON file. See %s for how to generate this.", ui.LinkString("https://infracost.io/troubleshoot"))
+	} else if strings.HasPrefix(stderr, "Error: No value for required variable") {
+		msg += "\n\nYou have two options:\n"
+		msg += "1. Pass the variables using the --terraform-plan-flags option,\n     e.g. --terraform-plan-flags=\"-var-file=my.tfvars\"\n\n"
+		msg += fmt.Sprintf("2. Set --path to a Terraform plan JSON file. See %s for how to generate this.", ui.LinkString("https://infracost.io/troubleshoot"))
+	} else if strings.HasPrefix(stderr, "Error: Failed to read variables file") {
+		msg += "\n\nYou have two options:\n"
+		msg += "1. Ensure the variable file is passed relative to your Terraform directory,\n     e.g. --path=path/to/code --terraform-plan-flags=\"-var-file=my.tfvars\"\n\n"
+		msg += fmt.Sprintf("2. Set --path to a Terraform plan JSON file. See %s for how to generate this.", ui.LinkString("https://infracost.io/troubleshoot"))
+	} else if strings.HasPrefix(stderr, "Error: error configuring Terraform AWS Provider: no valid credential sources for Terraform AWS Provider found.") {
+		msg += "\n\nTerraform requires AWS credentials to be set. You have two options:\n"
+		msg += fmt.Sprintf("1. See %s for details of how to set credentials.\n\n", ui.LinkString("https://registry.terraform.io/providers/hashicorp/aws/latest/docs#authentication"))
+		msg += fmt.Sprintf("2. Set --path to a Terraform plan JSON file. See %s for how to generate this.", ui.LinkString("https://infracost.io/troubleshoot"))
+	} else if p.IsTerragrunt {
+		msg += fmt.Sprintf("\n\nSee %s for how to generate multiple Terraform plan JSON files for your Terragrunt project, and use them with Infracost.", ui.LinkString("https://infracost.io/troubleshoot"))
+	} else {
+		msg += fmt.Sprintf("\n\nTry setting the --path to a Terraform plan JSON file. See %s for how to generate this.", ui.LinkString("https://infracost.io/troubleshoot"))
+
 	}
 
-	fmt.Fprintln(os.Stderr, msg)
+	return fmt.Errorf("%v%s", err, msg)
 }
 
 func extractStderr(err error) string {

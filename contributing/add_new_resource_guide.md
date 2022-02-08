@@ -33,6 +33,7 @@ The steps below describe adding an AWS resource using Terraform IaC provider, bu
   - [References to other resources](#references-to-other-resources)
   - [Google zone mappings](#google-zone-mappings)
   - [Azure zone mappings](#azure-zone-mappings)
+  - [Region usage](#region-usage)
 
 ## Prerequisites
 
@@ -1162,3 +1163,121 @@ Unless the resource has global or zone-based pricing, the first line of the reso
 		...
 	}
   ```
+
+### Region usage
+
+A number of resources have usage costs which vary on a per-region basis. This means that you often have to define a usage file with a complex map key with all the cloud provider regions. For example, `google_artifact_registry_repository` can have any number of Google regions under the `monthly_egress_data_transfer_gb` usage parameter:
+
+```yaml
+  google_artifact_registry_repository.artifact_registry:
+    storage_gb: 150
+    monthly_egress_data_transfer_gb:
+      us_east1: 100
+      us_west1: 100
+      australia_southeast1: 100
+      europe_north1: 100
+      southamerica_east1: 100
+```
+
+If you have a resource like this, rather than defining your own usage field, you should use one of the shared `RegionsUsage` structs that handle this structure for you. These structs can be found in both [the `google`](../internal/resources/google/util.go) & [`aws`](../internal/resources/aws/util.go) resource util files.
+
+These can simply be embedded into a struct field like so:
+
+```go
+type MyResource struct {
+    ...
+    MonthlyDataProcessedGB *RegionsUsage `infracost_usage:"monthly_processed_gb"`
+}
+```
+
+And then after `PopulateUsage` is called it can be accessed to retrieve set values. `RegionsUsage` helper struct also comes with a `Values` method that returns the set values as a `slice` with key/value pairs that is helpful to iterate over to create cost components, e.g with a usage like so:
+
+```yaml
+  my_resource.resource:
+    monthly_processed_gb:
+      europe_north1: 100
+      southamerica_east1: 200
+```
+
+running:
+
+```go
+func (r *MyResource) BuildResource() *schema.Resource {
+    values := r.MonthlyDataProcessedGB.Values()
+
+    for _, v := range values {
+        fmt.Println("%s => %2.f", v.Key, v.Value)
+    }
+    ...
+}
+```
+
+would print:
+
+
+```bash
+europe-north1 => 100.00
+southamerica-east1 => 200.00
+```
+
+#### Adding new regions
+
+Every so often cloud providers add locations/regions to their cloud infrastructure. When this happens we need to update shared provider variables so that the new regions are available in usage files.
+
+#### AWS
+
+Common usage structs are defined in the [`internal/resources/aws/util.go`](../internal/resources/aws/util.go) file. You'll need to update: 
+
+```go
+var RegionMapping = map[string]string{
+  "us-gov-west-1":   "AWS GovCloud (US-West)",
+  // Add the new region here with the aws code mapping to the region name
+  // as defined here: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html
+}
+```
+
+```go
+type RegionsUsage struct {
+  USGovWest1   *float64 `infracost_usage:"us_gov_west_1"`
+  // Add your new region here with the infracost_usage struct tag
+  // representing an underscored version of the aws region code
+  // e.g: eu-west-1 => eu_west_1.
+  //
+  // The struct field type must be *float
+}
+```
+
+```go
+var RegionUsageSchema = []*schema.UsageItem{
+  {Key: "us_gov_west_1", DefaultValue: 0, ValueType: schema.Float64},
+  // Finally, add your new region to the usage schema.
+  // Set the Key as the underscored code of the region (as outlined
+  // in the prior RegionsUsage struct). Then set DefaultValue as 0
+  // and the ValueType to schema.Float64.
+}
+```
+#### Google
+
+Common usage structs are defined in the [`internal/resources/google/util.go`](../internal/resources/google/util.go) file. You'll need to update: 
+
+
+```go
+type RegionsUsage struct {
+  AsiaEast1              *float64 `infracost_usage:"asia_east1"`
+  // Add your new region here with the infracost_usage struct tag
+  // representing an underscored version of the google location code
+  // e.g: eu-west-1 => eu_west_1.
+  //
+  // The struct field type must be *float
+}
+```
+
+```go
+var RegionUsageSchema = []*schema.UsageItem{
+  {ValueType: schema.Float64, DefaultValue: 0, Key: "asia_east1"},
+  // Finally, add your new region to the usage schema.
+  // Set the Key as the underscored code of the location (as outlined
+  // in the prior RegionsUsage struct). Then set DefaultValue as 0
+  // and the ValueType to schema.Float64.
+}
+```

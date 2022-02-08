@@ -1,29 +1,23 @@
 package aws
 
 import (
+	"github.com/infracost/infracost/internal/resources/aws"
 	"github.com/infracost/infracost/internal/schema"
-	"github.com/tidwall/gjson"
 )
 
-func GetCloudFormationStackSetRegistryItem() *schema.RegistryItem {
+func getCloudFormationStackSetRegistryItem() *schema.RegistryItem {
 	return &schema.RegistryItem{
 		Name:  "aws_cloudformation_stack_set",
 		RFunc: NewCloudFormationStackSet,
 	}
 }
-
 func NewCloudFormationStackSet(d *schema.ResourceData, u *schema.UsageData) *schema.Resource {
-
-	if d.Get("template_body").Type != gjson.Null && (checkAWS(d) || checkAlexa(d) || checkCustom(d)) {
-		return &schema.Resource{
-			Name:      d.Address,
-			NoPrice:   true,
-			IsSkipped: true,
-		}
+	r := &aws.CloudFormationStackSet{
+		Address:      d.Address,
+		Region:       d.Get("region").String(),
+		TemplateBody: d.Get("template_body").String(),
 	}
 
-	return &schema.Resource{
-		Name:           d.Address,
-		CostComponents: cloudFormationCostComponents(d, u),
-	}
+	r.PopulateUsage(u)
+	return r.BuildResource()
 }

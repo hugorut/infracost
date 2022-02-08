@@ -3,16 +3,18 @@ package terraform
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/kballard/go-shellquote"
 	"os"
 	"path/filepath"
 	"sort"
 
+	"github.com/kballard/go-shellquote"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/infracost/infracost/internal/config"
 	"github.com/infracost/infracost/internal/schema"
 	"github.com/infracost/infracost/internal/ui"
-	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 var defaultTerragruntBinary = "terragrunt"
@@ -89,6 +91,12 @@ func (p *TerragruntProvider) LoadResources(usage map[string]*schema.UsageData) (
 
 	projects := make([]*schema.Project, 0, len(projectDirs))
 
+	spinner := ui.NewSpinner("Extracting only cost-related params from terragrunt plan", ui.SpinnerOptions{
+		EnableLogging: p.ctx.RunContext.Config.IsLogging(),
+		NoColor:       p.ctx.RunContext.Config.NoColor,
+		Indent:        "  ",
+	})
+	defer spinner.Fail()
 	for i, projectDir := range projectDirs {
 		metadata := config.DetectProjectMetadata(projectDir.ConfigDir)
 		metadata.Type = p.Type()
@@ -112,11 +120,13 @@ func (p *TerragruntProvider) LoadResources(usage map[string]*schema.UsageData) (
 		projects = append(projects, project)
 	}
 
+	spinner.Success()
 	return projects, nil
 }
 
 func (p *TerragruntProvider) getProjectDirs() ([]terragruntProjectDirs, error) {
 	spinner := ui.NewSpinner("Running terragrunt run-all terragrunt-info", p.spinnerOpts)
+	defer spinner.Fail()
 
 	terragruntFlags, err := shellquote.Split(p.TerragruntFlags)
 	if err != nil {
@@ -131,7 +141,7 @@ func (p *TerragruntProvider) getProjectDirs() ([]terragruntProjectDirs, error) {
 	out, err := Cmd(opts, "run-all", "--terragrunt-ignore-external-dependencies", "terragrunt-info")
 	if err != nil {
 		spinner.Fail()
-		p.printTerraformErr(err)
+		err = p.buildTerraformErr(err)
 
 		return []terragruntProjectDirs{}, err
 	}
@@ -187,6 +197,7 @@ func (p *TerragruntProvider) generateStateJSONs(projectDirs []terragruntProjectD
 		spinnerMsg += " for each project"
 	}
 	spinner := ui.NewSpinner(spinnerMsg, p.spinnerOpts)
+	defer spinner.Fail()
 
 	for _, projectDir := range projectDirs {
 		opts, err := p.buildCommandOpts(projectDir.ConfigDir)
@@ -243,6 +254,8 @@ func (p *TerragruntProvider) generatePlanJSONs(projectDirs []terragruntProjectDi
 	}
 
 	spinner := ui.NewSpinner("Running terragrunt run-all plan", p.spinnerOpts)
+	defer spinner.Fail()
+
 	planFile, planJSON, err := p.runPlan(opts, spinner, true)
 	defer func() {
 		err := cleanupPlanFiles(projectDirs, planFile)

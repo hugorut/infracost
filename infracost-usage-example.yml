@@ -30,11 +30,11 @@ resource_usage:
     vcpu_count: 2 # Number of the vCPUs for the instance type. Only applicable with t2, t3 & t4 Instance types. T2 requires credit_specification to be unlimited.
 
   aws_backup_vault.usage:
-    monthly_efs_warm_restore_gb: 10000 # Monthly number of EFS warm restore in GB. 
-    monthly_efs_cold_restore_gb: 10000 # Monthly number of EFS cold restore in GB. 
-    monthly_efs_item_restore_requests: 10000 # Monthly number of EFS item-level restore requests. 
-    monthly_efs_warm_backup_gb: 10000 # Monthly number of EFS warm backups in GB. 
-    monthly_efs_cold_backup_gb: 10000 # Monthly number of EFS cold backups in GB. 
+    monthly_efs_warm_restore_gb: 10000 # Monthly number of EFS warm restore in GB.
+    monthly_efs_cold_restore_gb: 10000 # Monthly number of EFS cold restore in GB.
+    monthly_efs_item_restore_requests: 10000 # Monthly number of EFS item-level restore requests.
+    monthly_efs_warm_backup_gb: 10000 # Monthly number of EFS warm backups in GB.
+    monthly_efs_cold_backup_gb: 10000 # Monthly number of EFS cold backups in GB.
     monthly_ebs_snapshot_gb: 10000 # Monthly number of EBS snapshots in GB.
     monthly_rds_snapshot_gb: 10000 # Monthly number of RDS snapshots in GB.
     monthly_aurora_snapshot_gb: 10000 # Monthly number of Aurora snapshots in GB.
@@ -45,11 +45,16 @@ resource_usage:
 
   aws_cloudformation_stack.my_formation:
     monthly_handler_operations: 10000 # Monthly number of non-free handler operations (resources outside of the AWS::*, Alexa::*, and Custom::* namespaces).
-    monthly_duration_secs: 0 # Monthly duration of non-free handler operations that go above 30 seconds, in seconds.  
+    monthly_duration_secs: 0 # Monthly duration of non-free handler operations that go above 30 seconds, in seconds.
 
   aws_cloudformation_stack_set.my_formation_set:
     monthly_handler_operations: 10000 # Monthly number of non-free handler operations (resources outside of the AWS::*, Alexa::*, and Custom::* namespaces).
-    monthly_duration_secs: 0 # Monthly duration of non-free handler operations that go above 30 seconds, in seconds.  
+    monthly_duration_secs: 0 # Monthly duration of non-free handler operations that go above 30 seconds, in seconds.
+
+  aws_cloudtrail.my_cloudtrail:
+    monthly_additional_management_events: 100000 # Monthly additional copies of read and write management events. The first copy of management events per region is free, so this should only be non-zero if there are multiple trails recording management events in this region.
+    monthly_data_events: 200000 # Monthly data events delivered to S3, Lambda or DynamoDB
+    monthly_insight_events: 400000 # Monthly CloudTrail Insight events
 
   aws_cloudwatch_event_bus.my_events:
     monthly_custom_events: 1000000            # Monthly custom events published. Each 64 KB chunk of payload is billed as 1 event.
@@ -129,7 +134,7 @@ resource_usage:
     monthly_list_block_requests: 1000000  # Monthly number of ListChangedBlocks and ListSnapshotBlocks requests.
     monthly_get_block_requests: 100000    # Monthly number of GetSnapshotBlock requests (block size is 512KiB).
     monthly_put_block_requests: 100000    # Monthly number of PutSnapshotBlock requests (block size is 512KiB).
-    fast_snapshot_restore_hours: 100      # Monthly number of DSU-hours for Fast snapshot restore  
+    fast_snapshot_restore_hours: 100      # Monthly number of DSU-hours for Fast snapshot restore
 
   aws_ebs_volume.my_standard_volume:
     monthly_standard_io_requests: 10000000 # Monthly I/O requests for standard volume (Magnetic storage).
@@ -156,6 +161,9 @@ resource_usage:
     vcpu_count: 2 # Number of the vCPUs for the instance type. Only applicable with t2, t3 & t4 Instance types. T2 requires credit_specification to be unlimited.
 
   aws_elasticache_cluster.my_redis_snapshot:
+    snapshot_storage_size_gb: 10000 # Size of Redis snapshots in GB.
+
+  aws_elasticache_replication_group.my_redis_replication_snapshot:
     snapshot_storage_size_gb: 10000 # Size of Redis snapshots in GB.
 
   aws_elb.my_elb:
@@ -413,19 +421,25 @@ resource_usage:
     monthly_requests: 10000   # Monthly number of workflow requests. Only applicable for Express Workflows.
     memory_mb: 128            # Average amount of memory consumed by workflow in MB. Only applicable for Express Workflows.
     workflow_duration_ms: 500 # Average duration of workflow in milliseconds. Only applicable for Express Workflows.
-  
+
   aws_waf_web_acl.my_waf:
     rule_group_rules: 5 # Total number of Rule Group rules used by the Web ACL.
     monthly_requests: 1000000 # Monthly number of web requests received.
 
   aws_wafv2_web_acl.my_waf2:
     rule_group_rules: 5          # Total number of Rule Group rules used by the Web ACL.
-    managed_rule_group_rules: 10 # Total number of Managed Rule Group rules used by the Web ACL.  
+    managed_rule_group_rules: 10 # Total number of Managed Rule Group rules used by the Web ACL.
     monthly_requests: 1000000 # Monthly number of web requests received.
-    
+
   #
   # Terraform GCP resources
   #
+  google_artifact_registry_repository.my_artifact_registry:
+    storage_gb: 150 # Total data stored in the repository in GB
+    monthly_egress_data_transfer_gb: # Monthly data delivered from the artifact registry repository in GB. You can specify any number of Google Cloud regions below, replacing - for _ e.g.:
+      europe_north1: 100 # GB of data delivered from the artifact registry to europe-north1.
+      australia_southeast1: 200 # GB of data delivered from the artifact registry to australia-southeast1.
+
   google_bigquery_dataset.my_dataset:
     monthly_queries_tb: 100 # Monthly number of bytes processed (also referred to as bytes read) in TB.
 
@@ -470,7 +484,7 @@ resource_usage:
       worldwide: 12500                # Worldwide excluding China, Australia but including Hong Kong.
       china: 8500                     # China excluding Hong Kong.
       australia: 250                  # Australia.
-  
+
   google_compute_vpn_gateway.my_compute_vpn_gateway:
     monthly_egress_data_transfer_gb:  # Monthly VM-VM data transfer from VPN gateway to the following, in GB:
       same_region: 250                # VMs in the same Google Cloud region.
@@ -480,7 +494,7 @@ resource_usage:
       south_america: 100              # Between Google Cloud regions within South America.
       oceania: 50                     # Indonesia and Oceania to/from any Google Cloud region.
       worldwide: 200                  # to a Google Cloud region on another continent.
-    
+
   google_compute_ha_vpn_gateway.my_compute_ha_vpn_gateway:
     monthly_egress_data_transfer_gb:  # Monthly VM-VM data transfer from VPN gateway to the following, in GB:
       same_region: 250                # VMs in the same Google Cloud region.
@@ -493,7 +507,7 @@ resource_usage:
 
   google_compute_forwarding_rule.my_forwarding:
     monthly_ingress_data_gb: 100
-  
+
   google_compute_global_forwarding_rule.my_global_forwarding:
     monthly_ingress_data_gb: 100
 
@@ -513,7 +527,7 @@ resource_usage:
   google_compute_target_http_proxy.my_proxy:
     monthly_proxy_instances: 10.2
     monthly_data_processed_gb: 100
-     
+
   google_compute_target_https_proxy.my_proxy:
     monthly_proxy_instances: 10.2
     monthly_data_processed_gb: 100
@@ -525,7 +539,7 @@ resource_usage:
   google_compute_target_tcp_proxy.my_proxy:
     monthly_proxy_instances: 10.2
     monthly_data_processed_gb: 100
-   
+
   google_compute_region_target_http_proxy.my_proxy:
     monthly_proxy_instances: 10.2
     monthly_data_processed_gb: 100
@@ -614,7 +628,9 @@ resource_usage:
     monthly_data_ingested_gb: 1000 # Monthly amount of data ingested in GB.
 
   azurerm_automation_account.my_account:
+    non_azure_config_node_count: 2 # Number of non-Azure configuration nodes.
     monthly_watcher_hours: 0 # Monthly number of watcher hours.
+    monthly_job_run_mins: 5 # Monthly number of job run minutes.
 
   azurerm_automation_dsc_configuration.my_configuration:
     non_azure_config_node_count: 0 # Number of non-Azure configuration nodes.
@@ -622,24 +638,27 @@ resource_usage:
   azurerm_automation_dsc_nodeconfiguration.my_nodeconfiguration:
     non_azure_config_node_count: 0 # Number of non-Azure configuration nodes.
 
-  azurerm_application_gateway.my_gateway: 
+  azurerm_application_gateway.my_gateway:
     monthly_data_processed_gb: 100000 #  Monthly data processed by the Application Gateway in GB.
     monthly_v2_capacity_units: 10000  # Number capacity(for v2) units gateway.
 
   azurerm_automation_job_schedule.my_schedule:
-    monthly_job_run_mins: 0 # Monthly number of job run minutes.  
+    monthly_job_run_mins: 0 # Monthly number of job run minutes.
+
+  azurerm_bastion_host.my_bastion_host:
+    monthly_outbound_data_gb: 100000 # Monthly outbound data in GB.
 
   azurerm_databricks_workspace.my_workspace:
     monthly_all_purpose_compute_dbu_hrs: 500 # Monthly number of All-purpose Compute Databricks Units in DBU-hours.
     monthly_jobs_compute_dbu_hrs: 1000 # Monthly number of Jobs Compute Databricks Units in DBU-hours.
     monthly_jobs_light_compute_dbu_hrs: 2000 # Monthly number of Jobs Light Compute Databricks Units in DBU-hours.
-  
+
   azurerm_function_app.my_functions:
     monthly_executions: 100000 # Monthly executions to the function. Only applicable for Consumption plan.
     execution_duration_ms: 500 # Average duration of each execution in milliseconds. Only applicable for Consumption plan.
     memory_mb: 128             # Average amount of memory consumed by function in MB. Only applicable for Consumption plan.
     instances: 1               # Number of instances. Only applicable for Premium plan.
-  
+
   azurerm_cdn_endpoint.my_endpoint:
     monthly_outbound_gb: 1000000 # Monthly number of outbound data transfers in GB.
     monthly_rules_engine_requests: 10000000 # Monthly number of rules engine requests.
@@ -715,13 +734,13 @@ resource_usage:
     monthly_analytical_storage_write_operations: 1000000 # Monthly number of write analytical storage operations.
     monthly_analytical_storage_read_operations: 1000000 # Monthly number of read analytical storage operations.
     max_request_units_utilization_percentage: 50 # Average utilisation of the maximum RU/s, starting at 10%. Possible values from 10 to 100.
-  
+
   azurerm_dns_a_record.my_a_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
-  
+
   azurerm_dns_aaaa_record.my_aaaa_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
-  
+
   azurerm_dns_caa_record.my_caa_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
 
@@ -739,7 +758,7 @@ resource_usage:
 
   azurerm_dns_srv_record.my_srv_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
-    
+
   azurerm_dns_txt_record.my_txt_record:
     monthly_queries: 11500000000  # Monthly number of DNS queries
 
@@ -772,10 +791,10 @@ resource_usage:
 
   azurerm_kubernetes_cluster_node_pool.my_node_pool:
     nodes: 3 # Node count for the node pool.
-  
+
   azurerm_container_registry.my_registry:
-    storage_gb: 150 
-    monthly_build_vcpu_hrs: 150 
+    storage_gb: 150
+    monthly_build_vcpu_hrs: 150
 
   azurerm_hdinsight_kafka_cluster.my_cluster:
     monthly_os_disk_operations: 1000000 # Average number of disk operations (writes, reads, deletes) using a unit size of 256KiB per OS disk per month.
@@ -833,10 +852,10 @@ resource_usage:
 
   azurerm_private_dns_a_record.my_a_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
-  
+
   azurerm_private_dns_aaaa_record.my_aaaa_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
-  
+
   azurerm_private_dns_cname_record.my_cname_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
 
@@ -848,7 +867,7 @@ resource_usage:
 
   azurerm_private_dns_srv_record.my_srv_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
-    
+
   azurerm_private_dns_txt_record.my_txt_record:
     monthly_queries: 1500000000  # Monthly number of DNS queries
 
@@ -874,6 +893,11 @@ resource_usage:
     monthly_data_retrieval_gb: 1000                       # Monthly number of data retrieval in GB.
     monthly_data_write_gb: 1000                           # Monthly number of data write in GB.
     blob_index_tags: 100000                               # Total number of Blob indexes.
+
+  azurerm_sql_database.my_database:
+    monthly_vcore_hours: 600             # Monthly number of used vCore-hours for serverless compute.
+    long_term_retention_storage_gb: 1000 # Number of GBs used by long-term retention backup storage.
+    extra_data_storage_gb: 250           # Override number of GBs used by extra data storage.
 
   azurerm_synapse_spark_pool.my_spark_pool:
     monthly_hours: 730 # Monthly number of hours used by each instance in the pool.

@@ -11,6 +11,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type ProjectContexter interface {
+	ProjectContext() map[string]interface{}
+}
+
 type ProjectContext struct {
 	RunContext    *RunContext
 	ProjectConfig *Project
@@ -44,6 +48,13 @@ func (c *ProjectContext) ContextValues() map[string]interface{} {
 	return c.contextVals
 }
 
+func (c *ProjectContext) SetFrom(d ProjectContexter) {
+	m := d.ProjectContext()
+	for k, v := range m {
+		c.SetContextValue(k, v)
+	}
+}
+
 func DetectProjectMetadata(path string) *schema.ProjectMetadata {
 	vcsRepoURL := os.Getenv("INFRACOST_VCS_REPOSITORY_URL")
 	vcsSubPath := os.Getenv("INFRACOST_VCS_SUB_PATH")
@@ -51,11 +62,19 @@ func DetectProjectMetadata(path string) *schema.ProjectMetadata {
 	terraformWorkspace := os.Getenv("INFRACOST_TERRAFORM_WORKSPACE")
 
 	if vcsRepoURL == "" {
+		vcsRepoURL = ciVCSRepo()
+	}
+
+	if vcsRepoURL == "" {
 		vcsRepoURL = gitRepo(path)
 	}
 
 	if vcsRepoURL != "" && vcsSubPath == "" {
 		vcsSubPath = gitSubPath(path)
+	}
+
+	if vcsPullRequestURL == "" {
+		vcsPullRequestURL = ciVCSPullRequestURL()
 	}
 
 	vcsRepoURL = stripVCSRepoPassword(vcsRepoURL)

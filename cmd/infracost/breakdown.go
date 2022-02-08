@@ -11,7 +11,7 @@ func breakdownCmd(ctx *config.RunContext) *cobra.Command {
 		Use:   "breakdown",
 		Short: "Show full breakdown of costs",
 		Long:  "Show full breakdown of costs",
-		Example: `  Use Terraform directory with any required Terraform flags:
+		Example: `  Use Terraform directory with any required flags:
 
       infracost breakdown --path /path/to/code --terraform-plan-flags "-var-file=my.tfvars"
 
@@ -51,7 +51,7 @@ func breakdownCmd(ctx *config.RunContext) *cobra.Command {
 	cmd.Flags().StringSlice("fields", []string{"monthlyQuantity", "unit", "monthlyCost"}, "Comma separated list of output fields: all,price,monthlyQuantity,unit,hourlyCost,monthlyCost.\nSupported by table and html output formats")
 
 	_ = cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"table", "json", "html"}, cobra.ShellCompDirectiveDefault
+		return validRunFormats, cobra.ShellCompDirectiveDefault
 	})
 
 	return cmd

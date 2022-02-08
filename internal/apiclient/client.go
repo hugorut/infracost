@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -19,7 +20,7 @@ type APIClient struct {
 	endpoint  string
 	apiKey    string
 	tlsConfig *tls.Config
-	runID     string
+	uuid      uuid.UUID
 }
 
 type GraphQLQuery struct {
@@ -65,7 +66,11 @@ func (c *APIClient) doRequest(method string, path string, d interface{}) ([]byte
 
 	c.AddAuthHeaders(req)
 
-	transport := &http.Transport{TLSClientConfig: c.tlsConfig}
+	// Use the DefaultTransport since this handles the HTTP/HTTPS proxy and other defaults
+	// and add the TLS config that was passed into the client
+	transport := http.DefaultTransport.(*http.Transport)
+	transport.TLSClientConfig = c.tlsConfig
+
 	client := &http.Client{Transport: transport}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -103,7 +108,9 @@ func (c *APIClient) AddDefaultHeaders(req *http.Request) {
 func (c *APIClient) AddAuthHeaders(req *http.Request) {
 	c.AddDefaultHeaders(req)
 	req.Header.Set("X-Api-Key", c.apiKey)
-	req.Header.Set("X-Trace-Id", c.runID)
+	if c.uuid != uuid.Nil {
+		req.Header.Set("X-Infracost-Trace-Id", fmt.Sprintf("cli=%s", c.uuid.String()))
+	}
 }
 
 func userAgent() string {
