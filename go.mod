@@ -104,6 +104,7 @@ require (
 	github.com/google/go-github/v41 v41.0.0
 	github.com/shurcooL/githubv4 v0.0.0-20220115235240-a14260e6f8a2
 	github.com/shurcooL/graphql v0.0.0-20200928012149-18c5c3165e3a
+	github.com/spf13/afero v1.1.2
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 )
 
